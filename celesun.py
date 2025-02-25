@@ -7,6 +7,8 @@ from PyQt5.QtCore import Qt, QPointF, QPoint, QTimer
 from suntime import Sun
 import pytz
 
+## TODO: Add color settings (dark theme) + Other colors / Monochrome setup
+
 class SettingsDialog(QDialog):
    def __init__(self, parent=None):
        super().__init__(parent)
