@@ -152,7 +152,98 @@ class CompassWidget(QWidget):
         self.settings_button = QPushButton('⚙', self)
         self.settings_button.setGeometry(360, 10, 30, 30)
         self.settings_button.clicked.connect(self.open_settings)
+        # Add clock button next to settings
+        self.clock_button = QPushButton('🕒', self)
+        self.clock_button.setGeometry(320, 10, 30, 30)
+        self.clock_button.clicked.connect(self.open_clock_window)
+        self.clock_button.setToolTip("Open High Precision Clock")
 
+    def open_clock_window(self):
+        import time
+    
+        class FastClockWindow(QWidget):
+            def __init__(self, parent_timezone, dark_mode):
+                super().__init__()
+                self.parent_timezone = parent_timezone
+                self.dark_mode = dark_mode
+                self.setup_ui()
+                self.start_clock()
+                
+            def setup_ui(self):
+                self.setWindowTitle("High Precision Clock")
+                self.setFixedSize(400, 100)
+            
+                layout = QVBoxLayout()
+                self.clock_label = QLabel("--:--:--.---.---")
+                self.clock_label.setAlignment(Qt.AlignCenter)
+            
+                # Set font to be large and monospace
+                font = self.clock_label.font()
+                font.setFamily("monospace")
+                font.setPointSize(20)
+                self.clock_label.setFont(font)
+            
+                layout.addWidget(self.clock_label)
+                self.setLayout(layout)
+                
+                # Apply dark mode if enabled
+                self.update_stylesheet()
+                
+            def update_stylesheet(self):
+                """Update the widget stylesheet based on dark mode setting"""
+                if self.dark_mode:
+                    self.setStyleSheet("""
+                        QWidget {
+                            background-color: #2D2D2D;
+                            color: #FFFFFF;
+                        }
+                        QLabel {
+                            color: #FFFFFF;
+                        }
+                    """)
+                else:
+                    self.setStyleSheet("")  # Reset to default styling
+                
+            def start_clock(self):
+                self.timer = QTimer()
+                self.timer.timeout.connect(self.update_clock)
+                self.timer.start(1)
+            
+            def update_clock(self):
+                # Get time with highest precision available
+                ns_time = time.time_ns()
+                
+                # Get current UTC time
+                utc_now = datetime.datetime.utcfromtimestamp(ns_time / 1_000_000_000)
+                
+                # Convert to the parent timezone
+                try:
+                    local_tz = pytz.timezone(self.parent_timezone)
+                    local_now = pytz.utc.localize(utc_now).astimezone(local_tz)
+                except:
+                    # Fallback to system time if timezone is invalid
+                    local_now = utc_now
+                
+                # Extract time components
+                hours = local_now.hour
+                minutes = local_now.minute
+                seconds = local_now.second
+                
+                # Microseconds from datetime
+                ms = local_now.microsecond // 1000
+                us = local_now.microsecond % 1000
+                
+                # Nanoseconds (estimated)
+                ns = (ns_time % 1_000_000) // 1_000
+                
+                clock_text = f"{hours:02d}:{minutes:02d}:{seconds:02d}.{ms:03d}.{us:03d}.{ns:03d}"
+                self.clock_label.setText(clock_text)
+        
+        # Create and store the window instance as an attribute
+        # Pass both timezone and dark mode setting
+        self.clock_window = FastClockWindow(self.timezone, self.dark_mode)
+        self.clock_window.show()
+        
     def open_settings(self):
         dialog = SettingsDialog(self)
         dialog.latitude_input.setText(str(self.latitude))
