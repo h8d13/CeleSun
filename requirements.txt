@@ -1,0 +1,3 @@
+suntime
+pyqt5
+pytz
