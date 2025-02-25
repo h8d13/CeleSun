@@ -1,21 +1,17 @@
 import sys
 import math
 import datetime
-from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QDialog, QVBoxLayout, QCompleter, QLabel, QLineEdit, QDialogButtonBox, QHBoxLayout, QCheckBox, QComboBox
+from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QDialog, QVBoxLayout, QCompleter, QLabel, QLineEdit, QDialogButtonBox, QHBoxLayout, QCheckBox, QComboBox, QListWidget
 from PyQt5.QtGui import QPainter, QPen, QFont, QFontMetrics, QBrush, QColor, QRadialGradient, QPainterPath
 from PyQt5.QtCore import Qt, QPointF, QPoint, QTimer, QEvent, QObject
 from suntime import Sun
 import pytz
 
-## Todo:
-# Dump settings somewhere so it uses the same
-
-## Annoying settings stuff 
 class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle('Settings')
-        self.setFixedSize(300, 300)  
+        self.setFixedSize(300, 300)  # Increased height for new settings
 
         self.layout = QVBoxLayout()
 
@@ -115,8 +111,7 @@ class SettingsDialog(QDialog):
         except ValueError as e:
             print(f"Invalid input: {e}")
             raise
-
-## Actual stuff
+    
 class CompassWidget(QWidget):
     def __init__(self):
         super().__init__()
@@ -173,16 +168,28 @@ class CompassWidget(QWidget):
                 super().__init__()
                 self.parent_timezone = parent_timezone
                 self.dark_mode = dark_mode
-                self.setup_ui()
+                
+                # Clock state variables
                 self.running = True
+                self.mode = "clock"  # "clock", "timer", "stopwatch"
+                self.paused = False
+                self.timer_start_time = 0
+                self.timer_duration = 0  # in seconds
+                self.stopwatch_start_time = 0
+                self.stopwatch_elapsed = 0
+                self.laps = []
+                
+                self.setup_ui()
                 self.clock_thread = threading.Thread(target=self.clock_worker, daemon=True)
                 self.clock_thread.start()
                 
             def setup_ui(self):
                 self.setWindowTitle("High Precision Clock")
-                self.setFixedSize(400, 100)
+                self.setFixedSize(500, 200)
             
-                layout = QVBoxLayout()
+                main_layout = QVBoxLayout()
+                
+                # Clock display
                 self.clock_label = QLabel("--:--:--.---.---")
                 self.clock_label.setAlignment(Qt.AlignCenter)
             
@@ -191,9 +198,61 @@ class CompassWidget(QWidget):
                 font.setFamily("monospace")
                 font.setPointSize(20)
                 self.clock_label.setFont(font)
-            
-                layout.addWidget(self.clock_label)
-                self.setLayout(layout)
+                
+                main_layout.addWidget(self.clock_label)
+                
+                # Mode selector
+                mode_layout = QHBoxLayout()
+                
+                self.clock_btn = QPushButton("🕒 Clock")
+                self.timer_btn = QPushButton("⏲️ Timer")
+                self.stopwatch_btn = QPushButton("⏱️ Stopwatch")
+                
+                self.clock_btn.clicked.connect(lambda: self.change_mode("clock"))
+                self.timer_btn.clicked.connect(lambda: self.change_mode("timer"))
+                self.stopwatch_btn.clicked.connect(lambda: self.change_mode("stopwatch"))
+                
+                mode_layout.addWidget(self.clock_btn)
+                mode_layout.addWidget(self.timer_btn)
+                mode_layout.addWidget(self.stopwatch_btn)
+                
+                main_layout.addLayout(mode_layout)
+                
+                # Controls layout
+                controls_layout = QHBoxLayout()
+                
+                # Timer controls
+                self.timer_input = QLineEdit()
+                self.timer_input.setPlaceholderText("Set timer (seconds)")
+                self.timer_input.setVisible(False)
+                
+                # Create buttons with emoji icons
+                self.start_pause_btn = QPushButton("▶️ Start")
+                self.reset_btn = QPushButton("🔄 Reset")
+                self.lap_btn = QPushButton("🏁 Lap")
+                
+                self.start_pause_btn.clicked.connect(self.toggle_start_pause)
+                self.reset_btn.clicked.connect(self.reset)
+                self.lap_btn.clicked.connect(self.lap)
+                
+                # Hide controls initially as we start in clock mode
+                self.start_pause_btn.setVisible(False)
+                self.reset_btn.setVisible(False)
+                self.lap_btn.setVisible(False)
+                
+                controls_layout.addWidget(self.timer_input)
+                controls_layout.addWidget(self.start_pause_btn)
+                controls_layout.addWidget(self.reset_btn)
+                controls_layout.addWidget(self.lap_btn)
+                
+                main_layout.addLayout(controls_layout)
+                
+                # Lap display (only for stopwatch)
+                self.lap_display = QListWidget()
+                self.lap_display.setVisible(False)
+                main_layout.addWidget(self.lap_display)
+                
+                self.setLayout(main_layout)
                 
                 # Apply dark mode if enabled
                 self.update_stylesheet()
@@ -209,40 +268,235 @@ class CompassWidget(QWidget):
                         QLabel {
                             color: #FFFFFF;
                         }
+                        QPushButton {
+                            background-color: #3D3D3D;
+                            color: #FFFFFF;
+                            border: 1px solid #555555;
+                            padding: 5px;
+                            border-radius: 3px;
+                        }
+                        QPushButton:hover {
+                            background-color: #4D4D4D;
+                        }
+                        QLineEdit {
+                            background-color: #3D3D3D;
+                            color: #FFFFFF;
+                            border: 1px solid #555555;
+                            padding: 5px;
+                        }
+                        QListWidget {
+                            background-color: #3D3D3D;
+                            color: #FFFFFF;
+                            border: 1px solid #555555;
+                        }
                     """)
                 else:
-                    self.setStyleSheet("")  # Reset to default styling
+                    self.setStyleSheet("""
+                        QPushButton {
+                            padding: 5px;
+                            border-radius: 3px;
+                        }
+                        QLineEdit {
+                            padding: 5px;
+                        }
+                    """)  # Reset to default styling with minimal padding
+            
+            def change_mode(self, mode):
+                """Change the clock mode"""
+                self.mode = mode
+                self.paused = False
+                
+                # Reset UI elements visibility based on mode
+                if mode == "clock":
+                    self.timer_input.setVisible(False)
+                    self.start_pause_btn.setVisible(False)
+                    self.reset_btn.setVisible(False)
+                    self.lap_btn.setVisible(False)
+                    self.lap_display.setVisible(False)
+                    
+                elif mode == "timer":
+                    self.timer_input.setVisible(True)
+                    self.start_pause_btn.setVisible(True)
+                    self.reset_btn.setVisible(True)
+                    self.lap_btn.setVisible(False)
+                    self.lap_display.setVisible(False)
+                    self.start_pause_btn.setText("▶️ Start")
+                    
+                elif mode == "stopwatch":
+                    self.timer_input.setVisible(False)
+                    self.start_pause_btn.setVisible(True)
+                    self.reset_btn.setVisible(True)
+                    self.lap_btn.setVisible(True)
+                    self.lap_display.setVisible(True)
+                    self.start_pause_btn.setText("▶️ Start")
+                    self.stopwatch_elapsed = 0
+                    self.laps = []
+                    self.update_lap_display()
+                    
+            def toggle_start_pause(self):
+                """Toggle start/pause for timer and stopwatch"""
+                if self.mode == "timer":
+                    if not self.paused and self.timer_start_time == 0:
+                        # Starting new timer
+                        try:
+                            self.timer_duration = float(self.timer_input.text())
+                            self.timer_start_time = time.time_ns() / 1_000_000_000
+                            self.paused = False
+                            self.start_pause_btn.setText("⏸️ Pause")
+                        except ValueError:
+                            # Show error if input is not a valid number
+                            self.clock_label.setText("Invalid timer value")
+                            return
+                    else:
+                        # Toggle pause
+                        self.paused = not self.paused
+                        if self.paused:
+                            self.start_pause_btn.setText("▶️ Resume")
+                            # Store elapsed time when pausing
+                            current_time = time.time_ns() / 1_000_000_000
+                            self.timer_duration -= (current_time - self.timer_start_time)
+                            self.timer_start_time = 0
+                        else:
+                            self.start_pause_btn.setText("⏸️ Pause")
+                            self.timer_start_time = time.time_ns() / 1_000_000_000
+                    
+                elif self.mode == "stopwatch":
+                    self.paused = not self.paused
+                    current_time = time.time_ns() / 1_000_000_000
+                    
+                    if self.paused:
+                        self.start_pause_btn.setText("▶️ Resume")
+                        # Store elapsed time when pausing
+                        if self.stopwatch_start_time > 0:
+                            self.stopwatch_elapsed += (current_time - self.stopwatch_start_time)
+                            self.stopwatch_start_time = 0
+                    else:
+                        self.start_pause_btn.setText("⏸️ Pause")
+                        self.stopwatch_start_time = current_time
+            
+            def reset(self):
+                """Reset timer or stopwatch"""
+                if self.mode == "timer":
+                    self.timer_start_time = 0
+                    self.timer_duration = 0
+                    self.paused = False
+                    self.start_pause_btn.setText("▶️ Start")
+                    self.clock_label.setText("00:00:00.000.000.000")
+                    
+                elif self.mode == "stopwatch":
+                    self.stopwatch_start_time = 0
+                    self.stopwatch_elapsed = 0
+                    self.paused = False
+                    self.start_pause_btn.setText("▶️ Start")
+                    self.clock_label.setText("00:00:00.000.000.000")
+                    self.laps = []
+                    self.update_lap_display()
+            
+            def lap(self):
+                """Record a lap time for stopwatch"""
+                if self.mode == "stopwatch" and (self.stopwatch_start_time > 0 or self.stopwatch_elapsed > 0):
+                    # Calculate current elapsed time
+                    if not self.paused and self.stopwatch_start_time > 0:
+                        current_time = time.time_ns() / 1_000_000_000
+                        total_elapsed = self.stopwatch_elapsed + (current_time - self.stopwatch_start_time)
+                    else:
+                        total_elapsed = self.stopwatch_elapsed
+                    
+                    # Format lap time
+                    lap_time = self.format_time_from_seconds(total_elapsed)
+                    
+                    # Add to laps list
+                    self.laps.append((len(self.laps) + 1, lap_time))
+                    self.update_lap_display()
+            
+            def update_lap_display(self):
+                """Update the lap times display"""
+                self.lap_display.clear()
+                for lap_num, lap_time in reversed(self.laps):  # Show newest laps first
+                    self.lap_display.addItem(f"Lap {lap_num}: {lap_time}")
+            
+            def format_time_from_seconds(self, seconds):
+                """Format seconds into HH:MM:SS.mmm.uuu.nnn format"""
+                # Extract hours, minutes, seconds
+                hours = int(seconds) // 3600
+                minutes = (int(seconds) % 3600) // 60
+                seconds_part = seconds % 60
+                
+                int_seconds = int(seconds_part)
+                frac_seconds = seconds_part - int_seconds
+                
+                # Convert fractional seconds to ms, us, ns
+                ms = int(frac_seconds * 1000) % 1000
+                us = int(frac_seconds * 1000000) % 1000
+                ns = int(frac_seconds * 1000000000) % 1000
+                
+                return f"{hours:02d}:{minutes:02d}:{int_seconds:02d}.{ms:03d}.{us:03d}.{ns:03d}"
             
             def clock_worker(self):
                 """Worker function that runs in a separate thread"""
                 while self.running:
                     # Get time with highest precision available
                     ns_time = time.time_ns()
+                    current_time = ns_time / 1_000_000_000
                     
-                    # Get current UTC time
-                    utc_now = datetime.datetime.utcfromtimestamp(ns_time / 1_000_000_000)
+                    if self.mode == "clock":
+                        # Get current UTC time
+                        utc_now = datetime.datetime.utcfromtimestamp(ns_time / 1_000_000_000)
+                        
+                        # Convert to the parent timezone
+                        try:
+                            local_tz = pytz.timezone(self.parent_timezone)
+                            local_now = pytz.utc.localize(utc_now).astimezone(local_tz)
+                        except:
+                            # Fallback to system time if timezone is invalid
+                            local_now = utc_now
+                        
+                        # Extract time components
+                        hours = local_now.hour
+                        minutes = local_now.minute
+                        seconds = local_now.second
+                        
+                        # Microseconds from datetime
+                        ms = local_now.microsecond // 1000
+                        us = local_now.microsecond % 1000
+                        
+                        # Nanoseconds (estimated)
+                        ns = (ns_time % 1_000_000) // 1_000
+                        
+                        clock_text = f"{hours:02d}:{minutes:02d}:{seconds:02d}.{ms:03d}.{us:03d}.{ns:03d}"
                     
-                    # Convert to the parent timezone
-                    try:
-                        local_tz = pytz.timezone(self.parent_timezone)
-                        local_now = pytz.utc.localize(utc_now).astimezone(local_tz)
-                    except:
-                        # Fallback to system time if timezone is invalid
-                        local_now = utc_now
+                    elif self.mode == "timer":
+                        if not self.paused and self.timer_start_time > 0:
+                            # Calculate remaining time
+                            elapsed = current_time - self.timer_start_time
+                            remaining = self.timer_duration - elapsed
+                            
+                            if remaining <= 0:
+                                # Timer complete
+                                clock_text = "⏰ Time's Up! ⏰"
+                                self.paused = True
+                                self.timer_start_time = 0
+                                
+                                # Use postEvent to safely update UI from thread
+                                QApplication.instance().postEvent(self, _TimerCompleteEvent())
+                            else:
+                                # Show remaining time
+                                clock_text = self.format_time_from_seconds(remaining)
+                        else:
+                            # Show either initial duration or paused time
+                            if self.timer_duration > 0:
+                                clock_text = self.format_time_from_seconds(self.timer_duration)
+                            else:
+                                clock_text = "00:00:00.000.000.000"
                     
-                    # Extract time components
-                    hours = local_now.hour
-                    minutes = local_now.minute
-                    seconds = local_now.second
-                    
-                    # Microseconds from datetime
-                    ms = local_now.microsecond // 1000
-                    us = local_now.microsecond % 1000
-                    
-                    # Nanoseconds (estimated)
-                    ns = (ns_time % 1_000_000) // 1_000
-                    
-                    clock_text = f"{hours:02d}:{minutes:02d}:{seconds:02d}.{ms:03d}.{us:03d}.{ns:03d}"
+                    elif self.mode == "stopwatch":
+                        if not self.paused and self.stopwatch_start_time > 0:
+                            # Calculate elapsed time
+                            elapsed = self.stopwatch_elapsed + (current_time - self.stopwatch_start_time)
+                        else:
+                            elapsed = self.stopwatch_elapsed
+                        
+                        clock_text = self.format_time_from_seconds(elapsed)
                     
                     # Update the UI from the main thread
                     QApplication.instance().postEvent(self, _ClockUpdateEvent(clock_text))
@@ -258,13 +512,19 @@ class CompassWidget(QWidget):
                     self.clock_thread.join(1.0)  # Wait up to 1 second for thread to finish
                 super().closeEvent(event)
         
-        # Custom event for thread-safe UI updates
+        # Custom events for thread-safe UI updates
         class _ClockUpdateEvent(QEvent):
             EVENT_TYPE = QEvent.Type(QEvent.registerEventType())
             
             def __init__(self, clock_text):
                 super().__init__(_ClockUpdateEvent.EVENT_TYPE)
                 self.clock_text = clock_text
+        
+        class _TimerCompleteEvent(QEvent):
+            EVENT_TYPE = QEvent.Type(QEvent.registerEventType())
+            
+            def __init__(self):
+                super().__init__(_TimerCompleteEvent.EVENT_TYPE)
         
         # Event filter to handle custom events
         class ClockEventFilter(QObject):
@@ -275,6 +535,10 @@ class CompassWidget(QWidget):
             def eventFilter(self, obj, event):
                 if event.type() == _ClockUpdateEvent.EVENT_TYPE:
                     self.clock_window.clock_label.setText(event.clock_text)
+                    return True
+                elif event.type() == _TimerCompleteEvent.EVENT_TYPE:
+                    # Timer complete action
+                    self.clock_window.start_pause_btn.setText("▶️ Start")
                     return True
                 return super().eventFilter(obj, event)
         
@@ -627,7 +891,7 @@ class CompassWidget(QWidget):
 
         # Create a radial gradient for daytime arc with the selected color
         gradient = QRadialGradient(200, 200, 150)
-        gradient.setColorAt(0.0, QColor(self.gradient_color.red(), self.gradient_color.green(), self.gradient_color.blue(), 255))  # Brightest at center
+        gradient.setColorAt(0.0, QColor(self.gradient_color.red(), self.gradient_color.green(), self.gradient_color.blue(), 196))  # Brightest at center
         gradient.setColorAt(0.5, QColor(self.gradient_color.red(), self.gradient_color.green(), self.gradient_color.blue(), 128))  # Midway fade
         gradient.setColorAt(1.0, QColor(self.gradient_color.red(), self.gradient_color.green(), self.gradient_color.blue(), 0))    # Fully transparent at edge
         
