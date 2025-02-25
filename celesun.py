@@ -7,6 +7,9 @@ from PyQt5.QtCore import Qt, QPointF, QPoint, QTimer, QEvent, QObject
 from suntime import Sun
 import pytz
 
+## Todo:
+# Dump settings somewhere so it uses the same
+
 ## Annoying settings stuff 
 class SettingsDialog(QDialog):
     def __init__(self, parent=None):
