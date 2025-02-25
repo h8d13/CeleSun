@@ -28,5 +28,8 @@ New Settings!
 ---
 ![image](https://github.com/user-attachments/assets/c272505e-f03f-4879-9267-b248116a9068)
 
+### Darkmode & Color config:
+
+![image](https://github.com/user-attachments/assets/74314214-fc6d-4f27-9a8f-ec4d061e8a08)
 
 
