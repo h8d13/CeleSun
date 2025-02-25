@@ -12,6 +12,8 @@ Uses latitude, longitude and timezone to create GUI. (Defaults to Europe/Paris)
 
 ### You can then visit tokyo while they are sleeping 😴
 
+35.5, 139.5
+
 ![image](https://github.com/user-attachments/assets/4f36317f-d66c-4f7b-8559-e47be52fe1c8)
 
 
