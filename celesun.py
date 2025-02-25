@@ -7,6 +7,7 @@ from PyQt5.QtCore import Qt, QPointF, QPoint, QTimer, QEvent, QObject
 from suntime import Sun
 import pytz
 
+## Annoying settings stuff 
 class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -111,7 +112,8 @@ class SettingsDialog(QDialog):
         except ValueError as e:
             print(f"Invalid input: {e}")
             raise
-    
+
+## Actual stuff
 class CompassWidget(QWidget):
     def __init__(self):
         super().__init__()
