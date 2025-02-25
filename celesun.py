@@ -11,7 +11,7 @@ class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle('Settings')
-        self.setFixedSize(300, 300)  # Increased height for new settings
+        self.setFixedSize(300, 300)  
 
         self.layout = QVBoxLayout()
 
