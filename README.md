@@ -10,8 +10,9 @@ We break it down into 15° equal parts (Also 22.5 to be fancy) and work from the
 Uses latitude, longitude and timezone to create GUI. (Defaults to Europe/Paris)
 
 ---
-![image](https://github.com/user-attachments/assets/7bb8ec99-342c-4de9-bdc7-0c4a6ac48534)
+![image](https://github.com/user-attachments/assets/4503be89-a3cc-49b1-970a-52c19f5955a0)
 
+New Settings!
 
 ### You can then visit tokyo while they are sleeping 😴
 
