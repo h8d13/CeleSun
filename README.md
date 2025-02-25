@@ -1,4 +1,4 @@
-# CeleSun
+# CeleSun -  ΦLO-TIME
 
 CeleSun is a 24h clock based on a simple compass (an idea of my dad actually). 
 We break it down into 15° equal parts (Also 22.5 to be fancy) and work from there.
