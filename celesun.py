@@ -3,7 +3,7 @@ import math
 import datetime
 from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QDialog, QVBoxLayout, QCompleter, QLabel, QLineEdit, QDialogButtonBox, QHBoxLayout, QCheckBox, QComboBox
 from PyQt5.QtGui import QPainter, QPen, QFont, QFontMetrics, QBrush, QColor, QRadialGradient, QPainterPath
-from PyQt5.QtCore import Qt, QPointF, QPoint, QTimer
+from PyQt5.QtCore import Qt, QPointF, QPoint, QTimer, QEvent, QObject
 from suntime import Sun
 import pytz
 
@@ -160,14 +160,18 @@ class CompassWidget(QWidget):
 
     def open_clock_window(self):
         import time
-    
+        import threading
+        
+        # Create a class for the clock window
         class FastClockWindow(QWidget):
             def __init__(self, parent_timezone, dark_mode):
                 super().__init__()
                 self.parent_timezone = parent_timezone
                 self.dark_mode = dark_mode
                 self.setup_ui()
-                self.start_clock()
+                self.running = True
+                self.clock_thread = threading.Thread(target=self.clock_worker, daemon=True)
+                self.clock_thread.start()
                 
             def setup_ui(self):
                 self.setWindowTitle("High Precision Clock")
@@ -203,47 +207,81 @@ class CompassWidget(QWidget):
                     """)
                 else:
                     self.setStyleSheet("")  # Reset to default styling
-                
-            def start_clock(self):
-                self.timer = QTimer()
-                self.timer.timeout.connect(self.update_clock)
-                self.timer.start(1)
             
-            def update_clock(self):
-                # Get time with highest precision available
-                ns_time = time.time_ns()
+            def clock_worker(self):
+                """Worker function that runs in a separate thread"""
+                while self.running:
+                    # Get time with highest precision available
+                    ns_time = time.time_ns()
+                    
+                    # Get current UTC time
+                    utc_now = datetime.datetime.utcfromtimestamp(ns_time / 1_000_000_000)
+                    
+                    # Convert to the parent timezone
+                    try:
+                        local_tz = pytz.timezone(self.parent_timezone)
+                        local_now = pytz.utc.localize(utc_now).astimezone(local_tz)
+                    except:
+                        # Fallback to system time if timezone is invalid
+                        local_now = utc_now
+                    
+                    # Extract time components
+                    hours = local_now.hour
+                    minutes = local_now.minute
+                    seconds = local_now.second
+                    
+                    # Microseconds from datetime
+                    ms = local_now.microsecond // 1000
+                    us = local_now.microsecond % 1000
+                    
+                    # Nanoseconds (estimated)
+                    ns = (ns_time % 1_000_000) // 1_000
+                    
+                    clock_text = f"{hours:02d}:{minutes:02d}:{seconds:02d}.{ms:03d}.{us:03d}.{ns:03d}"
+                    
+                    # Update the UI from the main thread
+                    QApplication.instance().postEvent(self, _ClockUpdateEvent(clock_text))
+                    
+                    # Sleep a tiny amount to prevent excessive CPU usage
+                    # Still allows for sub-millisecond updates
+                    time.sleep(0.0005)
+                    
+            def closeEvent(self, event):
+                """Handle window close event to stop the thread"""
+                self.running = False
+                if self.clock_thread.is_alive():
+                    self.clock_thread.join(1.0)  # Wait up to 1 second for thread to finish
+                super().closeEvent(event)
+        
+        # Custom event for thread-safe UI updates
+        class _ClockUpdateEvent(QEvent):
+            EVENT_TYPE = QEvent.Type(QEvent.registerEventType())
+            
+            def __init__(self, clock_text):
+                super().__init__(_ClockUpdateEvent.EVENT_TYPE)
+                self.clock_text = clock_text
+        
+        # Event filter to handle custom events
+        class ClockEventFilter(QObject):
+            def __init__(self, clock_window):
+                super().__init__()
+                self.clock_window = clock_window
                 
-                # Get current UTC time
-                utc_now = datetime.datetime.utcfromtimestamp(ns_time / 1_000_000_000)
-                
-                # Convert to the parent timezone
-                try:
-                    local_tz = pytz.timezone(self.parent_timezone)
-                    local_now = pytz.utc.localize(utc_now).astimezone(local_tz)
-                except:
-                    # Fallback to system time if timezone is invalid
-                    local_now = utc_now
-                
-                # Extract time components
-                hours = local_now.hour
-                minutes = local_now.minute
-                seconds = local_now.second
-                
-                # Microseconds from datetime
-                ms = local_now.microsecond // 1000
-                us = local_now.microsecond % 1000
-                
-                # Nanoseconds (estimated)
-                ns = (ns_time % 1_000_000) // 1_000
-                
-                clock_text = f"{hours:02d}:{minutes:02d}:{seconds:02d}.{ms:03d}.{us:03d}.{ns:03d}"
-                self.clock_label.setText(clock_text)
+            def eventFilter(self, obj, event):
+                if event.type() == _ClockUpdateEvent.EVENT_TYPE:
+                    self.clock_window.clock_label.setText(event.clock_text)
+                    return True
+                return super().eventFilter(obj, event)
         
         # Create and store the window instance as an attribute
-        # Pass both timezone and dark mode setting
         self.clock_window = FastClockWindow(self.timezone, self.dark_mode)
-        self.clock_window.show()
         
+        # Install event filter for thread-safe UI updates
+        self.clock_event_filter = ClockEventFilter(self.clock_window)
+        self.clock_window.installEventFilter(self.clock_event_filter)
+        
+        self.clock_window.show()
+
     def open_settings(self):
         dialog = SettingsDialog(self)
         dialog.latitude_input.setText(str(self.latitude))
