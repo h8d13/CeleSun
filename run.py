@@ -4,6 +4,9 @@ import importlib.util
 import subprocess
 from pathlib import Path
 
+## Mostly for linux to make sure we are in self contained venv with right dependencies and paths
+## Mac/Windows should be able to just run the other celesun script with requirements installed. 
+
 def check_virtual_env():
     """Check if running in a virtual environment and exit if not."""
     
