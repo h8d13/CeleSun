@@ -5,7 +5,7 @@ Get it running
 
 `sudo apt-get install libxcb-xinerama0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xkb1 libxkbcommon-x11-0`
 
-If you get a path error you need to specify your PyQt install path `export QT_QPA_PLATFORM_PLUGIN_PATH=/path/to/qt` 
+If you get a path error you need to specify your PyQt5 install path `export QT_QPA_PLATFORM_PLUGIN_PATH=/path/to/qt` 
 
 Create venv inside the cloned git `python -m venv venv`.
 
