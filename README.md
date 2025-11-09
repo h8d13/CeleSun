@@ -28,23 +28,11 @@ Uses latitude, longitude and timezone to create GUI. (Defaults to Europe/Paris)
 
 ### You can then visit tokyo while they are sleeping 😴
 
-35.5, 139.5
-
----
-![image](https://github.com/user-attachments/assets/4f36317f-d66c-4f7b-8559-e47be52fe1c8)
+35.5, 139.5 ; Asia/Tokyo
 
 ### Or Buenos Aires where you can see it's just past peak noon 🔆 
 
--34.3, -58.1
-
----
-![image](https://github.com/user-attachments/assets/c272505e-f03f-4879-9267-b248116a9068)
-
-### Darkmode & Color config:
-
-![image](https://github.com/user-attachments/assets/74314214-fc6d-4f27-9a8f-ec4d061e8a08)
-
----
+-34.3, -58.1 ; America/Argentina/Buenos_Aires
 
 ## Installation
 
