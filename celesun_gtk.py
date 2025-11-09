@@ -5,6 +5,7 @@ import datetime
 import gi
 import json
 import os
+import signal
 
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
@@ -681,6 +682,9 @@ class MainWindow(Adw.ApplicationWindow):
         super().__init__(application=app)
         self.set_title('Celesun')
 
+        # Set clock icon
+        self.set_icon_name('preferences-system-time')
+
         # Load config
         self.config = load_config()
 
@@ -811,4 +815,15 @@ class CelesunApp(Adw.Application):
 
 if __name__ == '__main__':
     app = CelesunApp()
+
+    # Handle Ctrl+C gracefully
+    def signal_handler(sig, frame):
+        print("\nReceived keyboard interrupt, closing...")
+        app.quit()
+
+    signal.signal(signal.SIGINT, signal_handler)
+
+    # Allow SIGINT to interrupt the GTK main loop
+    GLib.unix_signal_add(GLib.PRIORITY_HIGH, signal.SIGINT, lambda: app.quit())
+
     app.run(sys.argv)
