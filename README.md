@@ -10,9 +10,6 @@ Built with GTK4 and libadwaita for a modern, native Linux experience.
 
 Uses latitude, longitude and timezone to create GUI. (Defaults to Europe/Paris)
 
----
-![image](https://github.com/user-attachments/assets/4503be89-a3cc-49b1-970a-52c19f5955a0)
-
 ## Features
 
 - **24-hour clock display** with compass-style visualization
