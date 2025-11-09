@@ -390,18 +390,121 @@ class CompassWidget(Gtk.DrawingArea):
             self.event = "Sunset"
             self.time_left = self.sunset - now
         else:
+            # Calculate tomorrow's actual sunrise time
             tomorrow = now.date() + datetime.timedelta(days=1)
-            tomorrow_sunrise = local_tz.localize(datetime.datetime.combine(
-                tomorrow,
-                self.sunrise.time()
-            ))
-            self.event = "Sunrise (tomorrow)"
+            tomorrow_midnight = datetime.datetime.combine(tomorrow, datetime.time(0, 0))
+            tomorrow_midnight_local = local_tz.localize(tomorrow_midnight)
+            tomorrow_midnight_utc = tomorrow_midnight_local.astimezone(pytz.utc)
+
+            try:
+                tomorrow_sunrise_utc = self.sun.get_sunrise_time(tomorrow_midnight_utc)
+                tomorrow_sunrise = tomorrow_sunrise_utc.astimezone(local_tz)
+                # Ensure the time is on tomorrow's date
+                tomorrow_sunrise = local_tz.localize(datetime.datetime.combine(
+                    tomorrow,
+                    tomorrow_sunrise.time()
+                ))
+            except Exception as e:
+                print(f"Error calculating tomorrow's sunrise: {e}")
+                # Fallback: use a reasonable default
+                tomorrow_sunrise = local_tz.localize(datetime.datetime.combine(
+                    tomorrow,
+                    datetime.time(6, 0)
+                ))
+
+            self.event = "Sunrise"
             self.time_left = tomorrow_sunrise - now
 
     def calculate_sun_position(self):
-        current_hour = self.now.hour + self.now.minute / 60 + self.now.second / 3600
-        self.sun_position = (current_hour * 15) % 360
+        """Calculate the actual solar azimuth and altitude"""
+        # Calculate solar position using astronomical formulas
+        # Based on NOAA solar position calculator
 
+        # Get Julian day
+        utc_now = self.now.astimezone(pytz.utc)
+        year = utc_now.year
+        month = utc_now.month
+        day = utc_now.day
+        hour = utc_now.hour + utc_now.minute / 60.0 + utc_now.second / 3600.0
+
+        # Julian day calculation
+        if month <= 2:
+            year -= 1
+            month += 12
+
+        A = int(year / 100)
+        B = 2 - A + int(A / 4)
+        JD = int(365.25 * (year + 4716)) + int(30.6001 * (month + 1)) + day + B - 1524.5
+        JD += hour / 24.0
+
+        # Julian century
+        T = (JD - 2451545.0) / 36525.0
+
+        # Solar declination (simplified)
+        L0 = 280.46646 + 36000.76983 * T + 0.0003032 * T * T
+        L0 = L0 % 360
+
+        M = 357.52911 + 35999.05029 * T - 0.0001537 * T * T
+        M = M % 360
+        M_rad = math.radians(M)
+
+        C = (1.914602 - 0.004817 * T - 0.000014 * T * T) * math.sin(M_rad)
+        C += (0.019993 - 0.000101 * T) * math.sin(2 * M_rad)
+        C += 0.000289 * math.sin(3 * M_rad)
+
+        theta = L0 + C  # True longitude
+
+        epsilon = 23.439 - 0.0000004 * T  # Obliquity of ecliptic
+        epsilon_rad = math.radians(epsilon)
+        theta_rad = math.radians(theta)
+
+        declination = math.degrees(math.asin(math.sin(epsilon_rad) * math.sin(theta_rad)))
+        declination_rad = math.radians(declination)
+
+        # Hour angle
+        # Calculate equation of time
+        y = math.tan(epsilon_rad / 2) ** 2
+        e = 0.016708634 - 0.000042037 * T - 0.0000001267 * T * T
+
+        eq_time = 4 * math.degrees(
+            y * math.sin(2 * math.radians(L0)) -
+            2 * e * math.sin(M_rad) +
+            4 * e * y * math.sin(M_rad) * math.cos(2 * math.radians(L0)) -
+            0.5 * y * y * math.sin(4 * math.radians(L0)) -
+            1.25 * e * e * math.sin(2 * M_rad)
+        )
+
+        # Local hour angle
+        time_offset = eq_time + 4 * self.longitude
+        true_solar_time = (hour * 60 + time_offset) % 1440
+        hour_angle = (true_solar_time / 4) - 180
+        hour_angle_rad = math.radians(hour_angle)
+
+        # Solar azimuth calculation
+        lat_rad = math.radians(self.latitude)
+
+        # Solar elevation
+        elevation = math.degrees(math.asin(
+            math.sin(lat_rad) * math.sin(declination_rad) +
+            math.cos(lat_rad) * math.cos(declination_rad) * math.cos(hour_angle_rad)
+        ))
+
+        # Solar azimuth (measured from North, clockwise)
+        azimuth_rad = math.acos(
+            (math.sin(declination_rad) * math.cos(lat_rad) -
+             math.cos(declination_rad) * math.sin(lat_rad) * math.cos(hour_angle_rad)) /
+            math.cos(math.radians(elevation))
+        )
+
+        azimuth = math.degrees(azimuth_rad)
+
+        # Adjust azimuth based on hour angle
+        if hour_angle > 0:
+            azimuth = 360 - azimuth
+
+        self.sun_position = azimuth
+
+        # Calculate direction from azimuth
         directions = [
             (348.75, 11.25, "N"), (11.25, 33.75, "NNE"), (33.75, 56.25, "NE"),
             (56.25, 78.75, "ENE"), (78.75, 101.25, "E"), (101.25, 123.75, "ESE"),
@@ -411,12 +514,15 @@ class CompassWidget(Gtk.DrawingArea):
             (326.25, 348.75, "NNW")
         ]
 
-        for start, end, direction in directions:
-            if start <= self.sun_position < end:
-                self.sun_direction = direction
-                return
-
         self.sun_direction = "N"
+        for start, end, direction in directions:
+            if start <= azimuth < end:
+                self.sun_direction = direction
+                break
+
+        # Handle wraparound for North
+        if azimuth >= 348.75 or azimuth < 11.25:
+            self.sun_direction = "N"
 
     def draw_func(self, area, cr, width, height):
         # Calculate scaling based on window size
