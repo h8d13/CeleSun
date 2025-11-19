@@ -4,13 +4,16 @@ CeleSun is a 24h clock based on a simple compass (an idea of my dad actually).
 
 We break it down into 15° equal parts (Also 22.5 to be fancy) and work from there.
 
-Built with GTK4 and libadwaita for a modern, native Linux experience.
+Built with GTK4 and libadwaita for a modern, native Linux experience. 
+
+> Clocks are kinda stupid by design, using some neat Python libs we can maybe make a good one? 
 
 ---
 
 Uses latitude, longitude and timezone to create GUI. (Defaults to Europe/Paris)
 
-<img width="453" height="538" alt="Screenshot_20251109_123232" src="https://github.com/user-attachments/assets/02d5faa6-0033-43e4-bf1f-2028030437c6" />
+<img width="608" height="615" alt="Screenshot_20251119_142049" src="https://github.com/user-attachments/assets/8cc8e6e2-d53a-4457-a27e-6467cadaa2e2" />
+
 
 ## Features
 
